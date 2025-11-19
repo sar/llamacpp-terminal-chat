@@ -47,10 +47,13 @@ int main(int argc, char *argv[]) {
     Terminal::setTitle("LLaMA Chat");
 
     // Init chat context
+    // Init chat context
     Chat chatContext;
     chatContext.setChatGuards(chat_guards);
     chatContext.setChatMode(chat_mode);
-
+    
+    // Initialize a consistent save filename
+    chatContext.initPersistentFilename(DEFAULT_SAVE_FOLDER "chat.json");
     // Enable/disable debug
     if(!debug)
         Logging::disable_file_logging();
@@ -68,14 +71,15 @@ int main(int argc, char *argv[]) {
     }
 
     // Load user prompt
+    // Load user prompt
     if(user_prompt.empty()){
         chatContext.setupSystemPrompt("You are a very helpful assistant.");
         chatContext.setupDefaultActors();
+        chatContext.setAutosave(true);
     }else{
         if(!chatContext.loadUserPrompt(user_prompt))
             exit(1);   
     }
-
     // Load params profile
     if(!chatContext.loadParametersSettings(param_profile)){
         Logging::error("Failed to load the param profile from '%s' ! Please check it.", param_profile.c_str());
@@ -234,7 +238,7 @@ int main(int argc, char *argv[]) {
                 if(!std::filesystem::exists(save_folder_path))
                     std::filesystem::create_directory(save_folder_path);
 
-                std::string filename = arg.empty()? "/chat_" + getCurrentDate(): arg;
+                std::string filename = arg.empty()? "chat_" + getCurrentDate(): arg;
                 if(arg.find(DEFAULT_FILE_EXTENSION)==std::string::npos) filename+=DEFAULT_FILE_EXTENSION;
 
                 if(chatContext.saveConversation(save_folder_path + filename))
@@ -246,29 +250,26 @@ int main(int argc, char *argv[]) {
 
 
             // load from file
-            } else if (cmd == "/load") {
+            // load from file
+            } else if (cmd == "\x2fload") {
                 std::string filename = arg;
                 if(arg.find(DEFAULT_FILE_EXTENSION)==std::string::npos) 
                     filename+=DEFAULT_FILE_EXTENSION;
-                if (chatContext.loadSavedConversation(save_folder_path + filename))
+                if (chatContext.loadSavedConversation(save_folder_path + filename)) {
                     Logging::success("Conversation from '%s' loaded.", filename.c_str());
-                else
+                    chatContext.setAutosave(true);
+                } else {
                     Logging::error("Failed to load conversation!");
+                }
                 currentActor = chatContext.getAssistantName();
                 Terminal::pause();
                 continue;
-
-
-            /* ----------------------------------------------------------------- */
-            /*                            RELOAD CONFIGURATIONS                  */
-            /* ----------------------------------------------------------------- */
-            // reload params from file
             } else if (cmd == "/rparams") {
                 chatContext.loadParametersSettings(param_profile);
                 chatContext.setupChatStopWords(); 
                 Logging::success("Params '%s' reloaded!", param_profile.c_str());Terminal::pause();
                 continue;
-
+        
             // reload template
             } else if (cmd == "/rtemplate") {
                 chatContext.loadChatTemplates(chat_template);
@@ -416,8 +417,6 @@ int main(int argc, char *argv[]) {
             } else if (cmd == "/undo" || cmd == "/u") {
                 chatContext.removeLastMessage(2);
                 continue;
-
-            // reset all chat historial
             } else if (cmd == "/reset" || cmd == "/clear" || cmd == "/cls") {
                 chatContext.resetChatHistory();
                 currentActor = chatContext.getAssistantName();

@@ -43,6 +43,11 @@ class Chat : public Completion {
 public:
     Chat(){};
 
+    bool autosave_enabled = true;
+    std::string static_timestamp;
+    std::string persistent_save_filename = "";
+    std::string save_filename = "chat.json";
+
     void addNewMessage(std::string_view actor_name, std::string_view content);
 
     bool removeLastMessage(int nmessages);
@@ -98,6 +103,18 @@ public:
     bool hiddeThinkTokens(bool value);
 
     yyjson_mut_doc* getCurrentPrompt();
+
+    bool autosave();
+
+    bool isAutosaveEnabled();
+
+    void setAutosave(bool enabled);
+
+    std::string getSaveFilename();
+ 
+    void setSaveFilename(const std::string& filename);
+ 
+    void initPersistentFilename(const std::string& filename);
 
 private:
     messages_t messages;

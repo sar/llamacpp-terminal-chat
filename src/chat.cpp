@@ -4,6 +4,7 @@
 void Chat::addNewMessage(std::string_view actor_name, std::string_view content) {
     message_entry_t newEntry(getTimeStamp(), &actors[actor_name.data()], content.data());
     messages.push_back(newEntry);
+    autosave();
 }
 
 bool Chat::removeLastMessage(int nmessages = 1) {
@@ -32,12 +33,28 @@ void Chat::updateMessageContent(int number, std::string_view newContent) {
 }
 
 void Chat::resetChatHistory(){ 
+    // Temporarily disable autosave during reset
+    bool was_autosave_enabled = autosave_enabled;
+    autosave_enabled = false;
+    
+    // Save the persistent filename before clearing messages
+    std::string saved_persistent_filename = persistent_save_filename;
+    
     if(!using_system_prompt){ // remove all messages
         messages.clear();
     }else{             // reset all except the system prompt
         if (messages.size() > 1)
             messages.erase(messages.begin() + 1, messages.end());
     }
+    
+    // Restore persistent filename after reset
+    persistent_save_filename = saved_persistent_filename;
+    
+    // Restore autosave state
+    autosave_enabled = was_autosave_enabled;
+    
+    // Re-enable autosave after reset
+    autosave_enabled = true;
 }
 
 void Chat::draw() {
@@ -186,6 +203,9 @@ bool Chat::loadSavedConversation(std::string file_path) {
         }
     }
 
+    // Set the save filename to the loaded file path so that autosave uses the same file
+    setSaveFilename(file_path);
+    
     return true;
 }
 
@@ -380,3 +400,74 @@ yyjson_mut_doc* Chat::getCurrentPrompt(){
     }
     return getPromptJSON();
 }
+
+bool Chat::autosave() {
+    // Only autosave if enabled and we have messages
+    if (!isAutosaveEnabled() || messages.size() == 0) {
+        return false;
+    }
+    
+    // Use persistent filename if set, otherwise use default
+    // Use persistent filename if set, otherwise use default
+    std::string filename = getSaveFilename();
+    
+    // Create save directory if it doesn't exist
+    if (!std::filesystem::exists(DEFAULT_SAVE_FOLDER)) {
+        std::filesystem::create_directory(DEFAULT_SAVE_FOLDER);
+    }
+    
+    return saveConversation(filename);
+
+bool Chat::isAutosaveEnabled() {
+    // We'll implement this as a member variable in the class
+    return autosave_enabled;
+}
+
+void Chat::setAutosave(bool enabled) {
+    autosave_enabled = enabled;
+}
+
+void Chat::setSaveFilename(const std::string& filename) {
+    save_filename = filename;
+}
+
+void Chat::initPersistentFilename(const std::string& filename) {
+    persistent_save_filename = filename;
+    
+    // Set static timestamp for consistent autosave filenames
+    static_timestamp = getCurrentDate();
+}
+
+std::string Chat::getSaveFilename() {
+    // If we have a static timestamp, use it to create a consistent filename for autosave
+    if (!static_timestamp.empty()) {
+        // Extract the base name without directory path and extension
+        std::string basename = persistent_save_filename;
+        
+        // Remove directory path if present
+        size_t lastSlash = basename.find_last_of('/');
+        if (lastSlash != std::string::npos) {
+            basename = basename.substr(lastSlash + 1);
+        }
+        
+        // Remove extension if present
+        size_t lastDot = basename.find_last_of('.');
+        if (lastDot != std::string::npos) {
+            basename = basename.substr(0, lastDot);
+        }
+        
+        // Return timestamped filename with save folder path for consistent autosave
+        return DEFAULT_SAVE_FOLDER + basename + "_" + static_timestamp + ".json";
+    }
+    
+    // Fallback to original behavior
+    std::string filename = persistent_save_filename.empty() ? save_filename : persistent_save_filename;
+    
+    // Ensure the filename includes the save folder path
+    if (filename.find(DEFAULT_SAVE_FOLDER) == std::string::npos) {
+        return DEFAULT_SAVE_FOLDER + filename;
+    }
+    
+    return filename;
+}
+
